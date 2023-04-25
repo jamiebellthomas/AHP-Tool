@@ -10,7 +10,7 @@ offset = 0.1 #How much higher the start value is than the current value in the h
 ########################################################################################
 df = norm_main(model_name)
 
-# Next we're going to read in the hierarchy for the UrbanDelivery model
+# Next we're going to read in the hierarchy for the requested model
 
 with open(f"Models/{model_name}/{model_name}.pkl", 'rb') as f:
     criteria_dictionary, sub_criteria_dictionary = pickle.load(f)
@@ -21,6 +21,7 @@ for key in sub_criteria_dictionary:
 # And do the same for the criteria_dictionary
 for key in criteria_dictionary:
     criteria_dictionary[key] = np.real(criteria_dictionary[key])
+# 2 largest weightings are the criteria to be varied
 analysis_variable = sorted(criteria_dictionary, key=criteria_dictionary.get, reverse=True)[:2]
 offset = 0.1
 start_value1 = criteria_dictionary[analysis_variable[0]]
@@ -30,30 +31,31 @@ resolution = 50
 x = np.linspace(start_value1+offset, 0, resolution)
 y = np.linspace(start_value2+offset, 0, resolution)
 xx, yy = np.meshgrid(x, y, indexing='ij')
-# xx and yy are the differnt values that can be taken by the 'Dimensions' and 'Drone Type' criteria. 
+# xx and yy are the differnt values that can be taken by the two criteria in the variable space
 # We want to make a loop that will try all these values and see how the alternative score changes
 # The weightings still need to sum to 1, so we need to make sure that the other criteria are changed accordingly
 # Extract names deom model column of df and make a dictionary with the names as keys and the values as an empty list
 scores = {}
-# Make a list of the model names from the Model column of the dataframe
+# Make a list of the model names from the Model column of the dataframe, this is so we can add the scores to the correct list
 model_names = df['Model'].tolist()
 for model in model_names:
     scores[model] = []
+# Add the criteria to the scores dictionary
 for criteria in criteria_dictionary:
     scores[criteria] = []
+# Now we have a dictionary with the model names and the criteria as keys and empty lists as values
 for i in range(len(xx)):
     for j in range(len(xx[i])):
         # Change the values of the criteria in the criteria_dictionary
         criteria_dictionary[analysis_variable[0]] = xx[i][j]
         criteria_dictionary[analysis_variable[1]] = yy[i][j]
         sum = xx[i][j] + yy[i][j]
-        # give me the length of remaining criteria in the hierarchy
+        # Work out how many other criteria there are and how much they need to be changed by
         remaining_criteria = len(criteria_dictionary) - 2
         delta = ((start_value1+start_value2)-sum)/remaining_criteria
         for criteria in criteria_dictionary:
             if criteria not in analysis_variable:
                 criteria_dictionary[criteria] += delta
-                        # if any of the criteria are less than 0, skip this iteration
 
         # Create an empty df to store the weighted scores
         # This is where the normalised data is read in and scores are calculated using the weights from the hierarchy in the .pkl file
@@ -72,13 +74,15 @@ for i in range(len(xx)):
             scores[criteria].append(criteria_dictionary[criteria])
         
         # If any criteria weightings are less than 0, set hammerhead ev20, albatross 2.2 and XV-L to 0, reset the criteria weightings and skip this iteration
+        # Its easier to let it calculate the scores and then check if weightings are less than 0 than to check if they are less than 0 before calculating the scores and then skip the iteration
         if any(criteria_dictionary[criteria] < 0 for criteria in criteria_dictionary):
             for model in model_names:
                 scores[model][-1] = 0
-
+        # Reset the criteria weightings to the start values so that the next iteration starts from the same place
         for criteria in criteria_dictionary:
                 if criteria not in analysis_variable:
                     criteria_dictionary[criteria] -= delta
+                    
 # Now we have a list of lists, we want to make a dataframe from it
 scores_df = pd.DataFrame(scores)
 # Make a column that is the name of the alternative with the highest score out of the Albartross 2.2, Hammerhead ev20 and XV-L alternatives
